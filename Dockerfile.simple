@@ -1,6 +1,6 @@
 # Smart Dockerfile for KuroPanel - Auto-configured for your codebase
-# Uses PHP 8.1 for better compatibility with your CodeIgniter version
-FROM php:8.1-apache
+# Uses PHP 8.0 for better compatibility with CodeIgniter 4
+FROM php:8.0-apache
 
 # Install system dependencies required by your codebase
 RUN apt-get update && apt-get install -y \
