@@ -32,10 +32,10 @@ class Database extends Config
 	 */
 	public $default = [
 		'DSN'      => '',
-		'hostname' => $_ENV['DB_HOST'] ?? 'mysql',
-		'username' => $_ENV['DB_USERNAME'] ?? 'kuro_user',
-		'password' => $_ENV['DB_PASSWORD'] ?? 'kuro_password',
-		'database' => $_ENV['DB_DATABASE'] ?? 'kuro_db',
+		'hostname' => 'mysql',
+		'username' => 'kuro_user',
+		'password' => 'kuro_password',
+		'database' => 'kuro_db',
 		'DBDriver' => 'MySQLi',
 		'DBPrefix' => '',
 		'pConnect' => false,
@@ -81,6 +81,12 @@ class Database extends Config
 	public function __construct()
 	{
 		parent::__construct();
+
+		// Override default values with environment variables if available
+		$this->default['hostname'] = $_ENV['DB_HOST'] ?? $this->default['hostname'];
+		$this->default['username'] = $_ENV['DB_USERNAME'] ?? $this->default['username'];
+		$this->default['password'] = $_ENV['DB_PASSWORD'] ?? $this->default['password'];
+		$this->default['database'] = $_ENV['DB_DATABASE'] ?? $this->default['database'];
 
 		// Ensure that we always set the database group to 'tests' if
 		// we are currently running an automated test suite, so that
