@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # PHP Application with Apache
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: kuro-app
+    ports:
+      - "80:80"
+    volumes:
+      - .:/var/www/html
+      - ./writable:/var/www/html/writable
+    environment:
+      - CI_ENVIRONMENT=development
+      - DB_HOST=mysql
+      - DB_DATABASE=kuropanel
+      - DB_USER=root
+      - DB_PASSWORD=rootpass
+    depends_on:
+      - mysql
+    networks:
+      - kuro-net
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: kuro-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: kuropanel
+      MYSQL_USER: kurouser
+      MYSQL_PASSWORD: kuropass
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - kuro-net
+
+volumes:
+  mysql_data:
+
+networks:
+  kuro-net:
+    driver: bridge
