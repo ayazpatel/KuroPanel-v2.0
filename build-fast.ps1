@@ -34,14 +34,14 @@ function Write-ColorOutput {
 # Print header
 function Show-Header {
     Write-Host ""
-    Write-ColorOutput "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "Blue"
+    Write-ColorOutput "============================================================" "Blue"
     Write-ColorOutput "$($Symbols.Rocket) KUROPANEL V2 - ULTRA FAST PRODUCTION BUILD $($Symbols.Rocket)" "White"
-    Write-ColorOutput "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "Blue"
+    Write-ColorOutput "============================================================" "Blue"
     Write-ColorOutput "Build System: Docker Multi-stage with Alpine Linux" "Cyan"
     Write-ColorOutput "Build Mode: Production Optimized" "Cyan"
     Write-ColorOutput "Progress Tracking: Real-time with percentage" "Cyan"
     Write-ColorOutput "Platform: Windows PowerShell" "Cyan"
-    Write-ColorOutput "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "Blue"
+    Write-ColorOutput "============================================================" "Blue"
     Write-Host ""
 }
 
@@ -58,7 +58,7 @@ function Show-Progress {
     $Completed = [math]::Round(($Current / $Total) * $Width)
     $Remaining = $Width - $Completed
     
-    $ProgressBar = "█" * $Completed + "░" * $Remaining
+    $ProgressBar = "#" * $Completed + "-" * $Remaining
     
     Write-Host "`r[$ProgressBar] $Percentage% $Description" -NoNewline -ForegroundColor Blue
 }
@@ -285,9 +285,9 @@ function Test-ServiceHealth {
 # Show final status
 function Show-FinalStatus {
     Write-Host ""
-    Write-ColorOutput "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "Green"
+    Write-ColorOutput "============================================================" "Green"
     Write-ColorOutput "$($Symbols.CheckMark) BUILD COMPLETE - KUROPANEL V2 PRODUCTION READY! $($Symbols.CheckMark)" "Green"
-    Write-ColorOutput "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "Green"
+    Write-ColorOutput "============================================================" "Green"
     
     Write-Host ""
     Write-ColorOutput "$($Symbols.Chart) Service Status:" "Cyan"
