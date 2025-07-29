@@ -1,0 +1,128 @@
+# Production Docker Compose - FALLBACK VERSION for compatibility
+# Version: 2.0.1 - Fallback Build for troubled builds
+
+version: '3.8'
+
+# ==============================================================================
+# NETWORKS - Isolated and optimized
+# ==============================================================================
+networks:
+  kuro-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1500
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ==============================================================================
+# VOLUMES - Persistent storage with performance tuning
+# ==============================================================================
+volumes:
+  mysql_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/mysql
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/redis
+  uploads_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/uploads
+  logs_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/logs
+  sessions_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/sessions
+
+# ==============================================================================
+# SERVICES - Production-ready with fallback configuration
+# ==============================================================================
+services:
+  # ============================================================================
+  # APPLICATION SERVER - KuroPanel Main App (FALLBACK VERSION)
+  # ============================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production.fallback
+      args:
+        - BUILDKIT_PROGRESS=plain
+    container_name: kuro-app-prod-fallback
+    restart: unless-stopped
+    environment:
+      - CI_ENVIRONMENT=production
+      - DB_HOST=mysql
+      - DB_DATABASE=${DB_DATABASE:-kuropanel}
+      - DB_USER=${DB_USER:-kurouser}
+      - DB_PASSWORD=${DB_PASSWORD:-secure_password_123}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - APP_KEY=${APP_KEY:-your-32-character-secret-key-here}
+      - APP_URL=${APP_URL:-https://kuropanel.local}
+    volumes:
+      - uploads_data:/var/www/html/writable/uploads:rw
+      - sessions_data:/var/www/html/writable/session:rw
+      - logs_data:/var/www/html/writable/logs:rw
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - kuro-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ============================================================================
+  # MYSQL DATABASE SERVER
+  # ============================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: kuro-mysql-prod
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password_123}
+      MYSQL_DATABASE: ${DB_DATABASE:-kuropanel}
+      MYSQL_USER: ${DB_USER:-kurouser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secure_password_123}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - kuro-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # ============================================================================
+  # REDIS CACHE SERVER
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: kuro-redis-prod
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - kuro-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 20s
+      retries: 10

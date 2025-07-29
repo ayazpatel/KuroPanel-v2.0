@@ -24,13 +24,21 @@ RUN echo "📦 [10%] Installing system dependencies..." && \
     unzip \
     zip \
     curl \
+    wget \
     autoconf \
     gcc \
     g++ \
     make \
     musl-dev \
     linux-headers \
+    pkgconfig \
+    && echo "✅ [15%] Core build tools installed"
+
+# Install PHP extension dependencies
+RUN echo "🔧 [20%] Installing PHP extension dependencies..." && \
+    apk add --no-cache \
     icu-dev \
+    icu-libs \
     libzip-dev \
     libpng-dev \
     libjpeg-turbo-dev \
@@ -39,44 +47,52 @@ RUN echo "📦 [10%] Installing system dependencies..." && \
     libxml2-dev \
     curl-dev \
     zlib-dev \
-    && echo "✅ [20%] System dependencies installed"
+    mysql-dev \
+    sqlite-dev \
+    && echo "✅ [25%] Extension dependencies installed"
 
-# Stage 2: Configure and install PHP extensions [20-50%]
-RUN echo "🔧 [25%] Configuring PHP extensions..." && \
+# Stage 2: Configure and install PHP extensions [25-55%]
+RUN echo "🔧 [30%] Configuring GD extension..." && \
     docker-php-ext-configure gd \
     --with-freetype \
     --with-jpeg \
-    && echo "⚡ [35%] Installing PHP extensions (parallel build)..." && \
+    && echo "🔧 [35%] Configuring ZIP extension..." && \
+    docker-php-ext-configure zip \
+    && echo "⚡ [40%] Installing core PHP extensions..." && \
+    docker-php-ext-install -j$(nproc) \
+    pdo \
+    pdo_mysql \
+    mysqli \
+    mbstring \
+    xml \
+    && echo "⚡ [45%] Installing additional PHP extensions..." && \
     docker-php-ext-install -j$(nproc) \
     intl \
     zip \
     gd \
-    mbstring \
-    xml \
-    curl \
-    pdo \
-    pdo_mysql \
     opcache \
-    && echo "✅ [50%] PHP extensions installed"
+    && echo "🔧 [50%] Installing CURL extension..." && \
+    docker-php-ext-install curl \
+    && echo "✅ [55%] All PHP extensions installed successfully"
 
-# Stage 3: Install Composer [50-60%]
-RUN echo "📥 [55%] Installing Composer..." && \
+# Stage 3: Install Composer [55-65%]
+RUN echo "📥 [60%] Installing Composer..." && \
     curl -sS https://getcomposer.org/installer | php -- \
     --install-dir=/usr/local/bin \
     --filename=composer \
     --version=2.7.1 \
     && composer --version \
-    && echo "✅ [60%] Composer installed"
+    && echo "✅ [65%] Composer installed"
 
-# Stage 4: Setup application [60-90%]
+# Stage 4: Setup application [65-90%]
 WORKDIR /app
 
 # Copy composer files first for better layer caching
-RUN echo "📋 [65%] Preparing dependency installation..."
+RUN echo "📋 [70%] Preparing dependency installation..."
 COPY composer.json composer.lock ./
 
 # Install PHP dependencies with optimizations
-RUN echo "📦 [70%] Installing PHP dependencies (optimized)..." && \
+RUN echo "📦 [75%] Installing PHP dependencies (optimized)..." && \
     composer install \
     --no-dev \
     --optimize-autoloader \

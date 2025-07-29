@@ -1,0 +1,112 @@
+# Production Dockerfile for KuroPanel V2 - FALLBACK VERSION
+# Conservative build with Debian base for compatibility
+
+# ==============================================================================
+# BUILD STAGE - Use Debian-based PHP image for better compatibility
+# ==============================================================================
+FROM php:8.2-apache as builder
+
+# Progress indicator environment
+ARG BUILDKIT_PROGRESS=plain
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_NO_INTERACTION=1
+ENV COMPOSER_MEMORY_LIMIT=-1
+
+# Print build stage indicator
+RUN echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" && \
+    echo "🚀 BUILD STAGE STARTED - Debian Base (Fallback)" && \
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Stage 1: Update and install system dependencies [0-25%]
+RUN echo "📦 [10%] Updating system packages..." && \
+    apt-get update && \
+    echo "📦 [15%] Installing build essentials..." && \
+    apt-get install -y \
+    git \
+    unzip \
+    zip \
+    curl \
+    wget \
+    build-essential \
+    && echo "📦 [20%] Installing PHP extension dependencies..." && \
+    apt-get install -y \
+    libicu-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libonig-dev \
+    libxml2-dev \
+    libcurl4-openssl-dev \
+    zlib1g-dev \
+    default-mysql-client \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "✅ [25%] System dependencies installed"
+
+# Stage 2: Install PHP extensions one by one for better error tracking [25-60%]
+RUN echo "🔧 [30%] Configuring GD extension..." && \
+    docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && echo "⚡ [35%] Installing PDO extensions..." && \
+    docker-php-ext-install pdo pdo_mysql mysqli \
+    && echo "⚡ [40%] Installing string/text extensions..." && \
+    docker-php-ext-install mbstring xml \
+    && echo "⚡ [45%] Installing utility extensions..." && \
+    docker-php-ext-install zip intl \
+    && echo "⚡ [50%] Installing image extension..." && \
+    docker-php-ext-install gd \
+    && echo "⚡ [55%] Installing performance extensions..." && \
+    docker-php-ext-install opcache \
+    && echo "✅ [60%] All PHP extensions installed successfully"
+
+# Stage 3: Install Composer [60-70%]
+RUN echo "📥 [65%] Installing Composer..." && \
+    curl -sS https://getcomposer.org/installer | php -- \
+    --install-dir=/usr/local/bin \
+    --filename=composer \
+    --version=2.7.1 \
+    && composer --version \
+    && echo "✅ [70%] Composer installed"
+
+# Stage 4: Setup application [70-90%]
+WORKDIR /var/www/html
+
+# Copy composer files first for better layer caching
+RUN echo "📋 [75%] Preparing dependency installation..."
+COPY composer.json composer.lock ./
+
+# Install PHP dependencies with optimizations
+RUN echo "📦 [80%] Installing PHP dependencies..." && \
+    composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction \
+    --prefer-dist \
+    && echo "✅ [85%] Dependencies installed"
+
+# Copy application source
+RUN echo "📁 [88%] Copying application files..."
+COPY . .
+
+# Set proper permissions and optimize
+RUN echo "🔐 [90%] Setting permissions and optimizing..." && \
+    chown -R www-data:www-data /var/www/html && \
+    chmod -R 755 /var/www/html && \
+    chmod -R 777 /var/www/html/writable && \
+    composer dump-autoload --optimize \
+    && echo "✅ [95%] Build completed successfully"
+
+# Configure Apache
+RUN echo "⚙️ [98%] Configuring Apache..." && \
+    a2enmod rewrite headers ssl \
+    && echo "✅ [100%] Ready for production"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/ || exit 1
+
+# Expose port
+EXPOSE 80
+
+# Start Apache
+CMD ["apache2-foreground"]

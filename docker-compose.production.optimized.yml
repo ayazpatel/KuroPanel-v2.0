@@ -106,7 +106,7 @@ services:
       start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.kuro.rule=Host(`${APP_DOMAIN:-kuropanel.local`)"
+      - "traefik.http.routers.kuro.rule=Host(`kuropanel.local`)"
       - "traefik.http.services.kuro.loadbalancer.server.port=80"
     deploy:
       resources:
