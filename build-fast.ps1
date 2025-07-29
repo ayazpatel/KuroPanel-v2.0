@@ -11,29 +11,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Colors and symbols
-$Colors = @{
-    Red = "`e[31m"
-    Green = "`e[32m"
-    Yellow = "`e[33m"
-    Blue = "`e[34m"
-    Purple = "`e[35m"
-    Cyan = "`e[36m"
-    White = "`e[37m"
-    Reset = "`e[0m"
-}
-
+# Simple symbols without complex Unicode
 $Symbols = @{
-    CheckMark = "✅"
-    Rocket = "🚀"
-    Gear = "⚙️"
-    Package = "📦"
-    Database = "🗄️"
-    Cache = "⚡"
-    Shield = "🛡️"
-    Chart = "📊"
-    Error = "❌"
-    Warning = "⚠️"
+    CheckMark = "[OK]"
+    Rocket = "[BUILD]"
+    Gear = "[SETUP]"
+    Package = "[DOCKER]"
+    Database = "[DB]"
+    Cache = "[CACHE]"
+    Shield = "[HEALTH]"
+    Chart = "[STATUS]"
+    Error = "[ERROR]"
+    Warning = "[WARN]"
 }
 
 # Print colored output
