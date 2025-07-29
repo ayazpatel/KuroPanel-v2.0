@@ -89,14 +89,21 @@ RUN echo '<VirtualHost *:80>\n\
 WORKDIR /var/www/html
 
 # Copy composer files first for better caching
-COPY composer.json composer.lock ./
+COPY composer.json composer.lock* ./
 
-# Update composer dependencies to be compatible with PHP 8.1
-RUN composer update --no-dev --optimize-autoloader --no-interaction || \
-    composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs
+# Install CodeIgniter 4 and dependencies
+RUN composer clear-cache && \
+    composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist || \
+    composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs --prefer-dist
 
 # Copy application files
 COPY . .
+
+# Ensure vendor directory exists and install if missing
+RUN if [ ! -d "vendor" ] || [ ! -f "vendor/autoload.php" ]; then \
+    echo "Vendor directory missing, reinstalling..."; \
+    composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs --prefer-dist; \
+    fi
 
 # Set proper permissions for CodeIgniter
 RUN chown -R www-data:www-data /var/www/html \
@@ -108,6 +115,24 @@ RUN if [ ! -f .env ]; then \
     cp env .env 2>/dev/null || echo "CI_ENVIRONMENT = development" > .env; \
     fi
 
+# Create a startup script to ensure everything is ready
+RUN echo '#!/bin/bash\n\
+# Ensure vendor directory exists\n\
+if [ ! -d "/var/www/html/vendor" ] || [ ! -f "/var/www/html/vendor/autoload.php" ]; then\n\
+    echo "Installing CodeIgniter 4 dependencies..."\n\
+    cd /var/www/html\n\
+    composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs --prefer-dist\n\
+fi\n\
+\n\
+# Set proper permissions\n\
+chown -R www-data:www-data /var/www/html\n\
+chmod -R 755 /var/www/html\n\
+chmod -R 777 /var/www/html/writable\n\
+\n\
+# Start Apache\n\
+exec apache2-foreground\n\
+' > /usr/local/bin/docker-entrypoint.sh && chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Expose port 80
 EXPOSE 80
 
@@ -116,4 +141,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost/ || exit 1
 
 # Start Apache
-CMD ["apache2-foreground"]
+CMD ["/usr/local/bin/docker-entrypoint.sh"]

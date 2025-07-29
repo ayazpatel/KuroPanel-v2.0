@@ -15,7 +15,7 @@ services:
       - CI_ENVIRONMENT=development
       # Database Configuration
       - DB_HOST=mysql
-      - DB_DATABASE=kuropanel
+      - DB_DATABASE=kuro_db
       - DB_USER=root
       - DB_PASSWORD=rootpass
       # Application Configuration
@@ -38,7 +38,7 @@ services:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: kuropanel
+      MYSQL_DATABASE: kuro_db
       MYSQL_USER: kurouser
       MYSQL_PASSWORD: kuropass
     volumes:
