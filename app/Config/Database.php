@@ -32,10 +32,10 @@ class Database extends Config
 	 */
 	public $default = [
 		'DSN'      => '',
-		'hostname' => env('DB_HOST', 'localhost'),
-		'username' => env('DB_USERNAME', ''),
-		'password' => env('DB_PASSWORD', ''),
-		'database' => env('DB_DATABASE', ''),
+		'hostname' => '',
+		'username' => '',
+		'password' => '',
+		'database' => '',
 		'DBDriver' => 'MySQLi',
 		'DBPrefix' => '',
 		'pConnect' => false,
@@ -81,6 +81,12 @@ class Database extends Config
 	public function __construct()
 	{
 		parent::__construct();
+
+		// Load environment variables for database configuration
+		$this->default['hostname'] = env('DB_HOST', 'mysql');
+		$this->default['username'] = env('DB_USERNAME', 'kuro_user');
+		$this->default['password'] = env('DB_PASSWORD', 'kuro_password');
+		$this->default['database'] = env('DB_DATABASE', 'kuro_db');
 
 		// Ensure that we always set the database group to 'tests' if
 		// we are currently running an automated test suite, so that
