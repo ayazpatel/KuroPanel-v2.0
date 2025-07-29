@@ -1,0 +1,138 @@
+services:
+  # KuroPanel V2 Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kuropanel_app_v2
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html:cached
+      - ./docker/apache/000-default.conf:/etc/apache2/sites-available/000-default.conf
+      - app_logs:/var/log
+    ports:
+      - "8080:80"
+      - "8443:443"
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html/public
+      - CI_ENVIRONMENT=production
+      - DB_HOST=database
+      - DB_USER=kuro_user
+      - DB_PASS=kuro_password
+      - DB_NAME=kuropanel
+      - APP_VERSION=2.0.0
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - kuropanel
+    healthcheck:
+      test: ["CMD", "/var/www/html/docker/scripts/health-check-v2.sh", "quick"]
+      timeout: 10s
+      retries: 3
+      interval: 30s
+      start_period: 60s
+    labels:
+      - "com.kuroneko.service=kuro-panel-v2"
+      - "com.kuroneko.version=2.0.0"
+
+  # MySQL Database with V2 Schema
+  database:
+    image: mysql:8.0
+    container_name: kuropanel_db_v2
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: kuropanel
+      MYSQL_USER: kuro_user
+      MYSQL_PASSWORD: kuro_password
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./kuro_upgraded.sql:/docker-entrypoint-initdb.d/01-kuro-v2.sql:ro
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "kuro_user", "-pkuro_password"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 40s
+    networks:
+      - kuropanel
+
+  # PHPMyAdmin with V2 Support
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: kuropanel_phpmyadmin_v2
+    restart: unless-stopped
+    environment:
+      PMA_HOST: database
+      PMA_USER: root
+      PMA_PASSWORD: root_password
+      PMA_ARBITRARY: 1
+      UPLOAD_LIMIT: 100M
+    ports:
+      - "8081:80"
+    depends_on:
+      - database
+    networks:
+      - kuropanel
+
+  # Redis Cache (Optional)
+  redis:
+    image: redis:7-alpine
+    container_name: kuropanel_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+      start_period: 30s
+    networks:
+      - kuropanel
+
+  # Test container for V2 testing
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: kuropanel_test_v2
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html:cached
+    environment:
+      - CI_ENVIRONMENT=testing
+      - DB_HOST=database
+      - DB_USER=kuro_user
+      - DB_PASS=kuro_password
+      - DB_NAME=kuropanel_test
+    depends_on:
+      - database
+    networks:
+      - kuropanel
+    profiles:
+      - testing
+
+volumes:
+  db_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  kuropanel:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

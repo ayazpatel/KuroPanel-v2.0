@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node modules (if any)
+node_modules
+npm-debug.log
+
+# Composer
+/vendor/composer/tmp-*
+
+# Environment files (we copy them explicitly)
+.env*
+!.env.example
+
+# Logs
+*.log
+writable/logs/*
+!writable/logs/index.html
+
+# Cache
+writable/cache/*
+!writable/cache/index.html
+
+# Sessions
+writable/session/*
+!writable/session/index.html
+
+# Uploads (for development)
+writable/uploads/*
+!writable/uploads/index.html
+
+# Testing
+tests/
+phpunit.xml
+phpunit.xml.dist
+coverage/
+
+# Build artifacts
+builds/
+.phpunit.result.cache
+
+# Docker
+docker-compose*.yml
+*.dockerfile
+Dockerfile*
+
+# Scripts
+*.bat
+*.ps1
+*.sh

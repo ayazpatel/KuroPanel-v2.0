@@ -1,0 +1,61 @@
+# Use official PHP image with CLI for testing
+FROM php:8.2-cli
+
+# Set working directory
+WORKDIR /var/www/html
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    libicu-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libonig-dev \
+    libxml2-dev \
+    libcurl4-openssl-dev \
+    sqlite3 \
+    libsqlite3-dev \
+    vim \
+    nano \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install \
+    pdo \
+    pdo_mysql \
+    pdo_sqlite \
+    mysqli \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd \
+    zip \
+    intl \
+    curl \
+    xml
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Copy application files
+COPY . .
+
+# Install PHP dependencies (including dev dependencies for testing)
+RUN composer install --optimize-autoloader
+
+# Create test environment file
+RUN cp .env.testing .env.example \
+    && cp .env.example .env.testing \
+    && cp .env.example .env
+
+# Set proper permissions
+RUN chmod -R 755 /var/www/html \
+    && chmod -R 777 /var/www/html/writable
+
+# Default command for testing
+CMD ["./vendor/bin/phpunit"]

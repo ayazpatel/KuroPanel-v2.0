@@ -1,0 +1,311 @@
+# Production Docker Compose for KuroPanel V2
+# Optimized for production deployment with security and performance
+
+services:
+  # KuroPanel V2 Production Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      target: production
+    container_name: kuropanel_prod
+    restart: always
+    hostname: kuropanel-app
+    working_dir: /var/www/html
+    volumes:
+      - ./docker/apache/production.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./docker/production/php.ini:/usr/local/etc/php/php.ini:ro
+      - app_logs:/var/log/kuropanel
+      - app_uploads:/var/www/html/writable/uploads
+      - app_sessions:/var/www/html/writable/session
+      - ssl_certs:/etc/ssl/certs/kuropanel:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - APACHE_DOCUMENT_ROOT=/var/www/html/public
+      - CI_ENVIRONMENT=production
+      - DB_HOST=database
+      - DB_USER=${DB_USER:-kuro_prod_user}
+      - DB_PASS=${DB_PASS:-}
+      - DB_NAME=${DB_NAME:-kuropanel_prod}
+      - APP_VERSION=2.0.0
+      - APP_DEBUG=false
+      - APP_BASEURL=${APP_BASEURL:-https://panel.example.com}
+      - REDIS_HOST=redis
+      - REDIS_PASS=${REDIS_PASS:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - kuropanel_internal
+      - kuropanel_external
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/health-check.sh"]
+      timeout: 10s
+      retries: 3
+      interval: 30s
+      start_period: 120s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    labels:
+      - "com.kuroneko.service=kuro-panel-prod"
+      - "com.kuroneko.version=2.0.0"
+      - "com.kuroneko.environment=production"
+      - "traefik.enable=true"
+      - "traefik.http.routers.kuropanel.rule=Host(`${DOMAIN:-panel.example.com}`)"
+      - "traefik.http.routers.kuropanel.tls=true"
+      - "traefik.http.routers.kuropanel.tls.certresolver=letsencrypt"
+
+  # Production MySQL Database with Replication Ready
+  database:
+    image: mysql:8.0
+    container_name: kuropanel_db_prod
+    restart: always
+    hostname: kuropanel-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-}
+      MYSQL_DATABASE: ${DB_NAME:-kuropanel_prod}
+      MYSQL_USER: ${DB_USER:-kuro_prod_user}
+      MYSQL_PASSWORD: ${DB_PASS:-}
+      MYSQL_INITDB_SKIP_TZINFO: 1
+    volumes:
+      - db_data_prod:/var/lib/mysql
+      - db_backups:/var/backups/mysql
+      - ./kuro_upgraded.sql:/docker-entrypoint-initdb.d/01-kuro-v2.sql:ro
+      - ./docker/mysql/production.cnf:/etc/mysql/conf.d/production.cnf:ro
+      - ./docker/mysql/backup.sh:/usr/local/bin/backup.sh:ro
+    ports:
+      - "127.0.0.1:3306:3306"  # Only localhost binding for security
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --innodb-buffer-pool-size=1G
+      --innodb-log-file-size=256M
+      --innodb-flush-log-at-trx-commit=2
+      --query-cache-type=1
+      --query-cache-size=64M
+      --max-connections=500
+      --slow-query-log=1
+      --slow-query-log-file=/var/log/mysql/slow.log
+      --long-query-time=2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "$DB_USER", "-p$DB_PASS"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 60s
+    networks:
+      - kuropanel_internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+
+  # Production Redis with Persistence
+  redis:
+    image: redis:7-alpine
+    container_name: kuropanel_redis_prod
+    restart: always
+    hostname: kuropanel-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data_prod:/data
+      - ./docker/redis/production.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      timeout: 10s
+      retries: 5
+      interval: 10s
+      start_period: 30s
+    networks:
+      - kuropanel_internal
+    security_opt:
+      - no-new-privileges:true
+    sysctls:
+      - net.core.somaxconn=65535
+
+  # Nginx Reverse Proxy (Optional - for load balancing)
+  nginx:
+    image: nginx:alpine
+    container_name: kuropanel_nginx_prod
+    restart: always
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./docker/nginx/production.conf:/etc/nginx/nginx.conf:ro
+      - ssl_certs:/etc/ssl/certs/kuropanel:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - app
+    networks:
+      - kuropanel_external
+    labels:
+      - "com.kuroneko.service=kuro-nginx-prod"
+    profiles:
+      - with-nginx
+
+  # Log Management with ELK Stack (Optional)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.8.0
+    container_name: kuropanel_elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:9200:9200"
+    networks:
+      - kuropanel_internal
+    profiles:
+      - with-logging
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.8.0
+    container_name: kuropanel_logstash
+    restart: always
+    volumes:
+      - ./docker/logstash/pipeline.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - app_logs:/var/log/kuropanel:ro
+    depends_on:
+      - elasticsearch
+    networks:
+      - kuropanel_internal
+    profiles:
+      - with-logging
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.8.0
+    container_name: kuropanel_kibana
+    restart: always
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "127.0.0.1:5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - kuropanel_internal
+    profiles:
+      - with-logging
+
+  # Monitoring with Prometheus & Grafana (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: kuropanel_prometheus
+    restart: always
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - kuropanel_internal
+    profiles:
+      - with-monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: kuropanel_grafana
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASS:-admin123}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - kuropanel_internal
+    profiles:
+      - with-monitoring
+
+# Named volumes for production persistence
+volumes:
+  db_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/mysql
+  redis_data_prod:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/redis
+  app_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/logs
+  app_uploads:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/uploads
+  app_sessions:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/sessions
+  ssl_certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SSL_PATH:-./ssl}
+  db_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${BACKUP_PATH:-./backups}/mysql
+  elasticsearch_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+# Production networks with proper isolation
+networks:
+  kuropanel_internal:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+  kuropanel_external:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.23.0.0/16

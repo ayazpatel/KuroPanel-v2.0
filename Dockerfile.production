@@ -1,0 +1,167 @@
+# Production Dockerfile for KuroPanel V2
+# Multi-stage build for optimized production deployment
+
+# Build stage
+FROM php:8.2-apache as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    libicu-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    libonig-dev \
+    libxml2-dev \
+    libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+    pdo \
+    pdo_mysql \
+    mysqli \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd \
+    zip \
+    intl \
+    curl \
+    xml \
+    opcache
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Copy source code
+WORKDIR /var/www/html
+COPY . .
+
+# Install dependencies (production only)
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+
+# Production stage
+FROM php:8.2-apache as production
+
+# Set environment
+ENV DEBIAN_FRONTEND=noninteractive
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+ENV CI_ENVIRONMENT=production
+ENV APP_VERSION=2.0.0
+
+# Install production dependencies only
+RUN apt-get update && apt-get install -y \
+    libicu72 \
+    libzip4 \
+    libpng16-16 \
+    libjpeg62-turbo \
+    libfreetype6 \
+    libonig5 \
+    libxml2 \
+    libcurl4 \
+    curl \
+    supervisor \
+    cron \
+    logrotate \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Install PHP extensions (production optimized)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+    pdo_mysql \
+    mysqli \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd \
+    zip \
+    intl \
+    curl \
+    xml \
+    opcache
+
+# Configure OPCache for production
+RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.memory_consumption=512" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.max_accelerated_files=20000" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.revalidate_freq=0" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.fast_shutdown=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.interned_strings_buffer=16" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
+
+# Configure PHP for production
+RUN echo "expose_php=Off" >> /usr/local/etc/php/conf.d/security.ini \
+    && echo "display_errors=Off" >> /usr/local/etc/php/conf.d/security.ini \
+    && echo "log_errors=On" >> /usr/local/etc/php/conf.d/security.ini \
+    && echo "error_log=/var/log/php_errors.log" >> /usr/local/etc/php/conf.d/security.ini \
+    && echo "max_execution_time=30" >> /usr/local/etc/php/conf.d/performance.ini \
+    && echo "memory_limit=256M" >> /usr/local/etc/php/conf.d/performance.ini \
+    && echo "post_max_size=50M" >> /usr/local/etc/php/conf.d/performance.ini \
+    && echo "upload_max_filesize=50M" >> /usr/local/etc/php/conf.d/performance.ini
+
+# Enable Apache modules for production
+RUN a2enmod rewrite headers ssl expires deflate security2 \
+    && a2dismod status info
+
+# Copy application from builder stage
+COPY --from=builder --chown=www-data:www-data /var/www/html /var/www/html
+
+# Copy production configurations
+COPY docker/apache/production.conf /etc/apache2/sites-available/000-default.conf
+COPY docker/supervisor/production.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/production/php.ini /usr/local/etc/php/php.ini
+COPY docker/production/logrotate.conf /etc/logrotate.d/kuropanel
+
+# Create necessary directories and set permissions
+RUN mkdir -p /var/log/kuropanel \
+    && mkdir -p /var/www/html/writable/{cache,logs,session,uploads} \
+    && chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html \
+    && chmod -R 777 /var/www/html/writable \
+    && chmod +x /var/www/html/docker/scripts/*.sh
+
+# Security hardening
+RUN chown root:root /var/www/html/docker/scripts/*.sh \
+    && chmod 755 /var/www/html/docker/scripts/*.sh \
+    && rm -rf /var/www/html/.git* \
+    && rm -rf /var/www/html/tests \
+    && rm -rf /var/www/html/*.md \
+    && rm -f /var/www/html/composer.* \
+    && find /var/www/html -name "*.log" -delete
+
+# Setup cron jobs for maintenance
+RUN echo "0 2 * * * www-data /var/www/html/docker/scripts/cleanup.sh" >> /etc/crontab \
+    && echo "*/15 * * * * www-data /var/www/html/docker/scripts/monitor-v2.sh once" >> /etc/crontab \
+    && echo "0 0 * * 0 www-data /var/www/html/docker/scripts/backup.sh" >> /etc/crontab
+
+# Create health check script
+RUN echo '#!/bin/bash\ncurl -f http://localhost/api/health || exit 1' > /usr/local/bin/health-check.sh \
+    && chmod +x /usr/local/bin/health-check.sh
+
+# Security labels
+LABEL maintainer="KuroPanel Team" \
+      version="2.0.0" \
+      environment="production" \
+      security.scan="enabled" \
+      backup.enabled="true"
+
+# Non-root user for security
+USER www-data
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD /usr/local/bin/health-check.sh
+
+# Expose ports
+EXPOSE 80 443
+
+# Use supervisor to manage processes
+USER root
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
