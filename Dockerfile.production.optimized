@@ -1,0 +1,211 @@
+# Production Dockerfile for KuroPanel V2 - ULTRA OPTIMIZED
+# Multi-stage build with progress indicators and caching
+
+# ==============================================================================
+# BUILD STAGE - Use Alpine Linux for 5x faster package installation
+# ==============================================================================
+FROM php:8.2-alpine as builder
+
+# Progress indicator environment
+ARG BUILDKIT_PROGRESS=plain
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_NO_INTERACTION=1
+ENV COMPOSER_MEMORY_LIMIT=-1
+
+# Print build stage indicator
+RUN echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" && \
+    echo "🚀 BUILD STAGE STARTED - Alpine Linux Base" && \
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Stage 1: Install system dependencies [0-20%]
+RUN echo "📦 [10%] Installing system dependencies..." && \
+    apk add --no-cache --update \
+    git \
+    unzip \
+    zip \
+    curl \
+    autoconf \
+    gcc \
+    g++ \
+    make \
+    musl-dev \
+    linux-headers \
+    icu-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    oniguruma-dev \
+    libxml2-dev \
+    curl-dev \
+    zlib-dev \
+    && echo "✅ [20%] System dependencies installed"
+
+# Stage 2: Configure and install PHP extensions [20-50%]
+RUN echo "🔧 [25%] Configuring PHP extensions..." && \
+    docker-php-ext-configure gd \
+    --with-freetype \
+    --with-jpeg \
+    && echo "⚡ [35%] Installing PHP extensions (parallel build)..." && \
+    docker-php-ext-install -j$(nproc) \
+    intl \
+    zip \
+    gd \
+    mbstring \
+    xml \
+    curl \
+    pdo \
+    pdo_mysql \
+    opcache \
+    && echo "✅ [50%] PHP extensions installed"
+
+# Stage 3: Install Composer [50-60%]
+RUN echo "📥 [55%] Installing Composer..." && \
+    curl -sS https://getcomposer.org/installer | php -- \
+    --install-dir=/usr/local/bin \
+    --filename=composer \
+    --version=2.7.1 \
+    && composer --version \
+    && echo "✅ [60%] Composer installed"
+
+# Stage 4: Setup application [60-90%]
+WORKDIR /app
+
+# Copy composer files first for better layer caching
+RUN echo "📋 [65%] Preparing dependency installation..."
+COPY composer.json composer.lock ./
+
+# Install PHP dependencies with optimizations
+RUN echo "📦 [70%] Installing PHP dependencies (optimized)..." && \
+    composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --classmap-authoritative \
+    --no-interaction \
+    --prefer-dist \
+    --no-scripts \
+    --no-progress \
+    && echo "✅ [80%] Dependencies installed"
+
+# Copy application source
+RUN echo "📁 [85%] Copying application files..."
+COPY . .
+
+# Optimize and clean up
+RUN echo "🧹 [90%] Optimizing and cleaning up..." && \
+    composer dump-autoload --optimize --classmap-authoritative && \
+    rm -rf \
+    tests/ \
+    .git/ \
+    .github/ \
+    docs/ \
+    *.md \
+    docker/ \
+    phpunit.xml* \
+    .env.example \
+    && find . -name "*.log" -delete \
+    && find . -name ".DS_Store" -delete \
+    && find . -name "Thumbs.db" -delete \
+    && echo "✅ [95%] Build stage optimized"
+
+RUN echo "🎉 [100%] BUILD STAGE COMPLETE!" && \
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ==============================================================================
+# PRODUCTION STAGE - Minimal runtime image
+# ==============================================================================
+FROM php:8.2-apache as production
+
+# Progress indicator
+RUN echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" && \
+    echo "🏭 PRODUCTION STAGE STARTED - Apache Runtime" && \
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
+ENV CI_ENVIRONMENT=production
+ENV APP_VERSION=2.0.0
+ENV PHP_OPCACHE_ENABLE=1
+ENV PHP_OPCACHE_MEMORY_CONSUMPTION=128
+ENV PHP_OPCACHE_MAX_ACCELERATED_FILES=10000
+
+# Stage 1: Install runtime dependencies [0-25%]
+RUN echo "📦 [10%] Installing runtime dependencies..." && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    libicu72 \
+    libzip4 \
+    libpng16-16 \
+    libjpeg62-turbo \
+    libfreetype6 \
+    libonig5 \
+    libxml2 \
+    libcurl4 \
+    curl \
+    supervisor \
+    cron \
+    logrotate \
+    zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && echo "✅ [25%] Runtime dependencies installed"
+
+# Stage 2: Install PHP extensions [25-50%]
+RUN echo "🔧 [30%] Installing PHP extensions..." && \
+    docker-php-ext-configure gd --with-freetype --with-jpeg && \
+    docker-php-ext-install -j$(nproc) \
+    pdo_mysql \
+    mysqli \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd \
+    zip \
+    intl \
+    curl \
+    xml \
+    opcache \
+    && echo "✅ [50%] PHP extensions installed"
+
+# Stage 3: Configure Apache [50-65%]
+RUN echo "⚙️ [55%] Configuring Apache..." && \
+    a2enmod rewrite headers expires deflate ssl && \
+    echo "ServerTokens Prod" >> /etc/apache2/apache2.conf && \
+    echo "ServerSignature Off" >> /etc/apache2/apache2.conf && \
+    sed -i "s|/var/www/html|${APACHE_DOCUMENT_ROOT}|g" /etc/apache2/sites-available/000-default.conf && \
+    echo "✅ [65%] Apache configured"
+
+# Stage 4: Copy optimized application [65-85%]
+RUN echo "📁 [70%] Copying application from build stage..."
+COPY --from=builder /app /var/www/html
+
+# Stage 5: Set permissions and final setup [85-100%]
+RUN echo "🔐 [85%] Setting permissions..." && \
+    chown -R www-data:www-data /var/www/html && \
+    chmod -R 755 /var/www/html && \
+    chmod -R 775 /var/www/html/writable && \
+    chmod -R 775 /var/www/html/public && \
+    echo "✅ [95%] Permissions set"
+
+# Copy production configurations
+COPY docker/production/php.ini /usr/local/etc/php/conf.d/99-production.ini
+COPY docker/apache/production.conf /etc/apache2/sites-available/000-default.conf
+COPY docker/supervisor/production.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Security: Run as non-root user
+USER www-data
+
+# Expose port
+EXPOSE 80
+
+RUN echo "🎉 [100%] PRODUCTION STAGE COMPLETE!" && \
+    echo "🚀 Ready for deployment!" && \
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Start supervisor
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

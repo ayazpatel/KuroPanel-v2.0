@@ -1,23 +1,33 @@
-# Production Dockerfile for KuroPanel V2
+# Production Dockerfile for KuroPanel V2 - OPTIMIZED
 # Multi-stage build for optimized production deployment
 
-# Build stage
-FROM php:8.2-apache as builder
+# Build stage - Use Alpine for faster builds
+FROM php:8.2-alpine as builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
+# Set build progress indicator
+ARG BUILDKIT_PROGRESS=plain
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_NO_INTERACTION=1
+
+# Install build dependencies (Alpine packages are much faster)
+RUN echo "=== BUILD STAGE: Installing dependencies [10%] ===" && \
+    apk add --no-cache \
     git \
     unzip \
-    libicu-dev \
+    zip \
+    curl \
+    autoconf \
+    g++ \
+    make \
+    icu-dev \
     libzip-dev \
     libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libonig-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    oniguruma-dev \
     libxml2-dev \
-    libcurl4-openssl-dev \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+    curl-dev \
+    zlib-dev
 
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
