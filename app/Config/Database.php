@@ -32,10 +32,10 @@ class Database extends Config
 	 */
 	public $default = [
 		'DSN'      => '',
-		'hostname' => 'localhost',
-		'username' => '',
-		'password' => '',
-		'database' => '',
+		'hostname' => $_ENV['DB_HOST'] ?? 'mysql',
+		'username' => $_ENV['DB_USERNAME'] ?? 'kuro_user',
+		'password' => $_ENV['DB_PASSWORD'] ?? 'kuro_password',
+		'database' => $_ENV['DB_DATABASE'] ?? 'kuro_db',
 		'DBDriver' => 'MySQLi',
 		'DBPrefix' => '',
 		'pConnect' => false,
