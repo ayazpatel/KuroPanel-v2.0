@@ -53,17 +53,15 @@ class Auth extends BaseController
 
     private function login_action()
     {
-        $username = $this->request->getPost('username');
-        $password = $this->request->getPost('password');
-        $stay_log = $this->request->getPost('stay_log');
+        $username = trim($this->request->getPost('username') ?? '');
+        $password = trim($this->request->getPost('password') ?? '');
+        $stay_log = trim($this->request->getPost('stay_log') ?? '');
 
+        // Basic validation without database checks to avoid PHP 8.1 null parameter issues
         $form_rules = [
             'username' => [
                 'label' => 'username',
-                'rules' => 'required|alpha_numeric|min_length[4]|max_length[25]|is_not_unique[users.username]',
-                'errors' => [
-                    'is_not_unique' => 'The {field} is not registered.'
-                ]
+                'rules' => 'required|alpha_numeric|min_length[4]|max_length[25]',
             ],
             'password' => [
                 'label' => 'password',
@@ -74,44 +72,50 @@ class Auth extends BaseController
             ]
         ];
 
-        if (!$this->validate($form_rules)) {
+        $data = [
+            'username' => $username,
+            'password' => $password,
+            'stay_log' => $stay_log
+        ];
+
+        if (!$this->validate($form_rules, $data)) {
             return redirect()->route('login')->withInput()->with('msgDanger', '<strong>Failed</strong> Please check the form.');
+        }
+
+        // Manual check for user existence to avoid validation null parameter issues
+        $cekUser = $this->userModel->getUser($username, 'username');
+        if (!$cekUser) {
+            return redirect()->route('login')->withInput()->with('msgDanger', '<strong>Failed</strong> Username is not registered.');
+        }
+
+        $hashPassword = create_password($password, false);
+        if (password_verify($hashPassword, $cekUser->password)) {
+            $time = new \CodeIgniter\I18n\Time;
+            $sessionData = [
+                'userid' => $cekUser->id_users,
+                'unames' => $cekUser->username,
+                'time_login' => $stay_log ? $time::now()->addHours(24) : $time::now()->addMinutes(30),
+                'time_since' => $time::now(),
+            ];
+            session()->set($sessionData);
+            return redirect()->to('dashboard');
         } else {
-            $validation = Services::validation();
-            $cekUser = $this->userModel->getUser($username, 'username');
-            if ($cekUser) {
-                $hashPassword = create_password($password, false);
-                if (password_verify($hashPassword, $cekUser->password)) {
-                    $time = new \CodeIgniter\I18n\Time;
-                    $data = [
-                        'userid' => $cekUser->id_users,
-                        'unames' => $cekUser->username,
-                        'time_login' => $stay_log ? $time::now()->addHours(24) : $time::now()->addMinutes(30),
-                        'time_since' => $time::now(),
-                    ];
-                    session()->set($data);
-                    return redirect()->to('dashboard');
-                } else {
-                    $validation->setError('password', 'Wrong password, please try again.');
-                    return redirect()->route('login')->withInput()->with('msgDanger', '<strong>Failed</strong> Please check the form.');
-                }
-            }
+            return redirect()->route('login')->withInput()->with('msgDanger', '<strong>Failed</strong> Wrong password, please try again.');
         }
     }
 
     public function register_action()
     {
-        $username = $this->request->getPost('username');
-        $password = $this->request->getPost('password');
-        $referral = $this->request->getPost('referral');
+        $username = trim($this->request->getPost('username') ?? '');
+        $password = trim($this->request->getPost('password') ?? '');
+        $password2 = trim($this->request->getPost('password2') ?? '');
+        $referral = trim($this->request->getPost('referral') ?? '');
 
+        // Basic validation without database checks to avoid PHP 8.1 null parameter issues
         $form_rules = [
             'username' => [
                 'label' => 'username',
-                'rules' => 'required|alpha_numeric|min_length[4]|max_length[25]|is_unique[users.username]',
-                'errors' => [
-                    'is_unique' => 'The {field} has been taken.'
-                ]
+                'rules' => 'required|alpha_numeric|min_length[4]|max_length[25]',
             ],
             'password' => [
                 'label' => 'password',
@@ -130,35 +134,48 @@ class Auth extends BaseController
             ]
         ];
 
-        if (!$this->validate($form_rules)) {
-            // Form Invalid
-        } else {
-            $mCode = new CodeModel();
-            $rCheck = $mCode->checkCode($referral);
-            $validation = Services::validation();
-            if (!$rCheck) {
-                $validation->setError('referral', 'Wrong referral, please try again.');
-            } else {
-                if ($rCheck->used_by) {
-                    $validation->setError('referral', "Wrong referral, code has been used &middot; $rCheck->used_by.");
-                } else {
-                    $hashPassword = create_password($password);
-                    $data_register = [
-                        'username' => $username,
-                        'password' => $hashPassword,
-                        'saldo' => $rCheck->set_saldo ?: 0,
-                        'uplink' => $rCheck->created_by
-                    ];
-                    $ids = $this->userModel->insert($data_register, true);
-                    if ($ids) {
-                        $mCode->useReferral($referral);
-                        $msg = "Register Successfuly!";
-                        return redirect()->to('login')->with('msgSuccess', $msg);
-                    }
-                }
-            }
+        $data = [
+            'username' => $username,
+            'password' => $password,
+            'password2' => $password2,
+            'referral' => $referral
+        ];
+
+        if (!$this->validate($form_rules, $data)) {
+            return redirect()->route('register')->withInput()->with('msgDanger', '<strong>Failed</strong> Please check the form.');
         }
-        return redirect()->route('register')->withInput()->with('msgDanger', '<strong>Failed</strong> Please check the form.');
+
+        // Manual check for username uniqueness to avoid validation null parameter issues
+        $existingUser = $this->userModel->getUser($username, 'username');
+        if ($existingUser) {
+            return redirect()->route('register')->withInput()->with('msgDanger', '<strong>Failed</strong> The username has been taken.');
+        }
+
+        $mCode = new CodeModel();
+        $rCheck = $mCode->checkCode($referral);
+        if (!$rCheck) {
+            return redirect()->route('register')->withInput()->with('msgDanger', '<strong>Failed</strong> Wrong referral, please try again.');
+        }
+
+        if ($rCheck->used_by) {
+            return redirect()->route('register')->withInput()->with('msgDanger', "<strong>Failed</strong> Wrong referral, code has been used by $rCheck->used_by.");
+        }
+
+        $hashPassword = create_password($password);
+        $data_register = [
+            'username' => $username,
+            'password' => $hashPassword,
+            'saldo' => $rCheck->set_saldo ?: 0,
+            'uplink' => $rCheck->created_by
+        ];
+        $ids = $this->userModel->insert($data_register, true);
+        if ($ids) {
+            $mCode->useReferral($referral);
+            $msg = "Register Successfully!";
+            return redirect()->to('login')->with('msgSuccess', $msg);
+        }
+
+        return redirect()->route('register')->withInput()->with('msgDanger', '<strong>Failed</strong> Registration failed, please try again.');
     }
 
     public function logout()
