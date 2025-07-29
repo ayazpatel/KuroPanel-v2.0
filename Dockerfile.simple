@@ -1,56 +1,119 @@
-# Simple Dockerfile for KuroPanel
-FROM php:8.2-apache
+# Smart Dockerfile for KuroPanel - Auto-configured for your codebase
+# Uses PHP 8.1 for better compatibility with your CodeIgniter version
+FROM php:8.1-apache
 
-# Install system dependencies
+# Install system dependencies required by your codebase
 RUN apt-get update && apt-get install -y \
     git \
     unzip \
+    zip \
+    curl \
+    wget \
+    # Required for intl extension
     libicu-dev \
+    # Required for zip extension
     libzip-dev \
+    # Required for GD extension (image processing)
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
+    # Required for mbstring extension
     libonig-dev \
+    # Required for XML extension
     libxml2-dev \
+    # Required for curl extension
     libcurl4-openssl-dev \
+    # Required for MySQL
     default-mysql-client \
+    # Additional utilities
+    nano \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
+# Configure and install PHP extensions based on your requirements
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install \
+    && docker-php-ext-configure zip \
+    && docker-php-ext-install -j$(nproc) \
+    # Database extensions (required by CodeIgniter)
     pdo \
     pdo_mysql \
     mysqli \
+    # String handling (required by CodeIgniter)
     mbstring \
+    # XML processing (required by CodeIgniter)
     xml \
+    # Archive handling (required for uploads/exports)
     zip \
+    # Internationalization (required by CodeIgniter)
     intl \
+    # Image processing (required for file uploads)
     gd \
+    # Performance optimization
     opcache
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Configure OPCache for better performance
+RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.memory_consumption=256" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.max_accelerated_files=20000" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.revalidate_freq=2" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
 
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
+# Configure PHP settings for CodeIgniter
+RUN echo "upload_max_filesize = 64M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "post_max_size = 64M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "memory_limit = 512M" >> /usr/local/etc/php/conf.d/memory.ini \
+    && echo "max_execution_time = 300" >> /usr/local/etc/php/conf.d/performance.ini
+
+# Install Composer
+COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
+
+# Enable Apache modules required by CodeIgniter
+RUN a2enmod rewrite headers
+
+# Configure Apache ServerName to suppress warnings
+RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+
+# Configure Apache VirtualHost for CodeIgniter
+RUN echo '<VirtualHost *:80>\n\
+    DocumentRoot /var/www/html/public\n\
+    ServerName localhost\n\
+    <Directory /var/www/html/public>\n\
+        Options Indexes FollowSymLinks\n\
+        AllowOverride All\n\
+        Require all granted\n\
+    </Directory>\n\
+    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
+    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
+</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
 
 # Set working directory
 WORKDIR /var/www/html
 
+# Copy composer files first for better caching
+COPY composer.json composer.lock ./
+
+# Update composer dependencies to be compatible with PHP 8.1
+RUN composer update --no-dev --optimize-autoloader --no-interaction || \
+    composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs
+
 # Copy application files
 COPY . .
 
-# Set permissions
+# Set proper permissions for CodeIgniter
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html \
     && chmod -R 777 /var/www/html/writable
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
+# Create .env file if it doesn't exist
+RUN if [ ! -f .env ]; then \
+    cp env .env 2>/dev/null || echo "CI_ENVIRONMENT = development" > .env; \
+    fi
 
 # Expose port 80
 EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/ || exit 1
 
 # Start Apache
 CMD ["apache2-foreground"]

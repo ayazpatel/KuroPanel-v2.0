@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # PHP Application with Apache
+  # PHP Application with Apache - Auto-configured for CodeIgniter
   app:
     build:
       context: .
@@ -13,13 +11,22 @@ services:
       - .:/var/www/html
       - ./writable:/var/www/html/writable
     environment:
+      # CodeIgniter Configuration
       - CI_ENVIRONMENT=development
+      # Database Configuration
       - DB_HOST=mysql
       - DB_DATABASE=kuropanel
       - DB_USER=root
       - DB_PASSWORD=rootpass
+      # Application Configuration
+      - APP_BASE_URL=http://localhost
+      - APP_TIMEZONE=UTC
+      # Apache Configuration
+      - APACHE_SERVERNAME=localhost
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - kuro-net
 
@@ -36,11 +43,21 @@ services:
       MYSQL_PASSWORD: kuropass
     volumes:
       - mysql_data:/var/lib/mysql
+      # Import SQL files if they exist
+      - ./kuro.sql:/docker-entrypoint-initdb.d/1-kuro.sql:ro
+      - ./kuro_upgraded.sql:/docker-entrypoint-initdb.d/2-kuro_upgraded.sql:ro
+    command: --default-authentication-plugin=mysql_native_password
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
     networks:
       - kuro-net
 
 volumes:
   mysql_data:
+    driver: local
 
 networks:
   kuro-net:
