@@ -84,9 +84,9 @@ class Database extends Config
 
 		// Load environment variables for database configuration
 		$this->default['hostname'] = env('DB_HOST', 'mysql');
-		$this->default['username'] = env('DB_USERNAME', 'kuro_user');
-		$this->default['password'] = env('DB_PASSWORD', 'kuro_password');
-		$this->default['database'] = env('DB_DATABASE', 'kuro_db');
+		$this->default['username'] = env('DB_USERNAME', 'root');
+		$this->default['password'] = env('DB_PASSWORD', 'rootpass');
+		$this->default['database'] = env('DB_DATABASE', 'kuropanel_v2');
 
 		// Ensure that we always set the database group to 'tests' if
 		// we are currently running an automated test suite, so that

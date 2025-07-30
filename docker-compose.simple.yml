@@ -15,7 +15,7 @@ services:
       - CI_ENVIRONMENT=development
       # Database Configuration
       - DB_HOST=mysql
-      - DB_DATABASE=kuro_db
+      - DB_DATABASE=kuropanel_v2
       - DB_USER=root
       - DB_PASSWORD=rootpass
       # Application Configuration
