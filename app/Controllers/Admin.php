@@ -38,21 +38,22 @@ class Admin extends BaseController
             'total_users' => $userModel->countAllResults(),
             'total_developers' => $userModel->where('level', 2)->countAllResults(),
             'total_resellers' => $userModel->where('level', 3)->countAllResults(),
-            'total_end_users' => $userModel->where('level', 4)->countAllResults(),
+            'end_users' => $userModel->where('level', 4)->countAllResults(),
             'total_apps' => $appModel->countAllResults(),
             'total_licenses' => $licenseModel->countAllResults(),
-            'active_licenses' => $licenseModel->where('status', 'active')->countAllResults()
+            'active_licenses' => $licenseModel->where('status', 'active')->countAllResults(),
+            'total_revenue' => $licenseModel->selectSum('price')->get()->getRow()->price ?? 0
         ];
 
         $recentUsers = $userModel->orderBy('created_at', 'DESC')->limit(10)->findAll();
-        $recentApps = $appModel->getAppsWithDeveloper();
+        $recentApps = array_slice($appModel->getAppsWithDeveloper(), 0, 10);
 
         $data = [
             'title' => 'Admin Dashboard',
             'user' => $this->user,
             'stats' => $stats,
             'recent_users' => $recentUsers,
-            'recent_apps' => array_slice($recentApps, 0, 10)
+            'recent_apps' => $recentApps
         ];
 
         return view('Admin/dashboard', $data);

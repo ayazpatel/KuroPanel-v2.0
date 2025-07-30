@@ -32,30 +32,43 @@ class Reseller extends BaseController
     {
         $resellerAppModel = new ResellerAppModel();
         $licenseModel = new LicenseKeyModel();
+        $appModel = new AppModel();
         
-        $assignedApps = $resellerAppModel->getResellerApps($this->userid);
+        // Get apps available for reseller
+        $availableApps = $appModel->getAppsForReseller($this->userid);
         
         $stats = [
-            'assigned_apps' => count($assignedApps),
-            'total_keys_generated' => 0,
+            'available_apps' => count($availableApps),
+            'keys_generated' => 0,
             'active_keys' => 0,
-            'total_users' => 0
+            'total_revenue' => 0
         ];
 
-        foreach ($assignedApps as $app) {
-            $appStats = $resellerAppModel->getResellerAppStats($this->userid, $app->id_app);
-            $stats['total_keys_generated'] += $appStats['total_keys_generated'];
-            $stats['active_keys'] += $appStats['active_keys'];
+        // Calculate stats
+        foreach ($availableApps as $app) {
+            $keyCount = $licenseModel->where('reseller_id', $this->userid)
+                                   ->where('app_id', $app->id_app)
+                                   ->countAllResults();
+            $activeCount = $licenseModel->where('reseller_id', $this->userid)
+                                       ->where('app_id', $app->id_app)
+                                       ->where('status', 'active')
+                                       ->countAllResults();
+            
+            $stats['keys_generated'] += $keyCount;
+            $stats['active_keys'] += $activeCount;
+            
+            // Add key count to app object for display
+            $app->key_count = $keyCount;
         }
 
         $data = [
             'title' => 'Reseller Dashboard',
             'user' => $this->user,
-            'apps' => $assignedApps,
+            'available_apps' => $availableApps,
             'stats' => $stats
         ];
 
-        return view('Reseller/dashboard', $data);
+        return view('Reseller/dashboard_new', $data);
     }
 
     /**

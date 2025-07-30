@@ -10,7 +10,7 @@ use CodeIgniter\Config\Services;
 
 class User extends BaseController
 {
-    protected $model, $userid, $user;
+    protected $model, $userid, $user, $time;
 
     public function __construct()
     {
@@ -35,20 +35,19 @@ class User extends BaseController
         
         $stats = [
             'total_licenses' => count($userLicenses),
-            'active_licenses' => count(array_filter($userLicenses, fn($l) => $l->status === 'active')),
-            'expired_licenses' => count(array_filter($userLicenses, fn($l) => $l->status === 'expired')),
-            'current_balance' => $this->user->saldo
+            'active_licenses' => count(array_filter($userLicenses, fn($l) => (is_object($l) ? $l->status : $l['status']) === 'active')),
+            'expired_licenses' => count(array_filter($userLicenses, fn($l) => (is_object($l) ? $l->status : $l['status']) === 'expired')),
+            'total_spent' => 0
         ];
 
         $data = [
             'title' => 'User Dashboard',
             'user' => $this->user,
-            'time' => $this->time,
-            'licenses' => $userLicenses,
+            'user_licenses' => $userLicenses,
             'stats' => $stats
         ];
 
-        return view('User/dashboard', $data);
+        return view('User/dashboard_new', $data);
     }
 
     /**
@@ -292,7 +291,6 @@ class User extends BaseController
 
         return view('User/add_balance', $data);
     }
-}
 
     public function ref_index()
     {

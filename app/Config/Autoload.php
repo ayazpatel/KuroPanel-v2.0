@@ -66,6 +66,19 @@ class Autoload extends AutoloadConfig
 
 	/**
 	 * -------------------------------------------------------------------
+	 * Helpers
+	 * -------------------------------------------------------------------
+	 * Prototype:
+	 * ```
+	 *   $helpers = ['form', 'url', 'text'];
+	 * ```
+	 *
+	 * @var array<int, string>
+	 */
+	public $helpers = ['kuropanel'];
+
+	/**
+	 * -------------------------------------------------------------------
 	 * Files
 	 * -------------------------------------------------------------------
 	 * The files array provides a list of paths to __non-class__ files
