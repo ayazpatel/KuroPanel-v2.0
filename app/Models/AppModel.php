@@ -64,12 +64,17 @@ class AppModel extends Model
     /**
      * Get apps with developer info
      */
-    public function getAppsWithDeveloper()
+    public function getAppsWithDeveloper($limit = null)
     {
-        return $this->select('apps.*, users.username as developer_username, users.fullname as developer_fullname')
-                   ->join('users', 'users.id_users = apps.developer_id')
-                   ->orderBy('apps.created_at', 'DESC')
-                   ->findAll();
+        $builder = $this->select('apps.*, users.username as developer_username, users.fullname as developer_fullname')
+                        ->join('users', 'users.id_users = apps.developer_id')
+                        ->orderBy('apps.created_at', 'DESC');
+        
+        if ($limit !== null) {
+            $builder->limit($limit);
+        }
+        
+        return $builder->findAll();
     }
 
     /**

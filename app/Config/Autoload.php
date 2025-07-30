@@ -75,7 +75,7 @@ class Autoload extends AutoloadConfig
 	 *
 	 * @var array<int, string>
 	 */
-	public $helpers = ['kuropanel'];
+	public $helpers = ['common'];
 
 	/**
 	 * -------------------------------------------------------------------
