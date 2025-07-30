@@ -94,6 +94,9 @@ class Auth extends BaseController
             $sessionData = [
                 'userid' => $cekUser->id_users,
                 'unames' => $cekUser->username,
+                'user_level' => $cekUser->level,
+                'user_id' => $cekUser->id_users,
+                'isLoggedIn' => true,
                 'time_login' => $stay_log ? $time::now()->addHours(24) : $time::now()->addMinutes(30),
                 'time_since' => $time::now(),
             ];

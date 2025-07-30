@@ -19,7 +19,7 @@ class RoleFilter implements FilterInterface
 
         // Get user from session or database
         $userModel = new \App\Models\UserModel();
-        $user = $userModel->find($session->get('userid'));
+        $user = $userModel->getUser($session->get('userid'));
         
         if (!$user) {
             $session->destroy();
